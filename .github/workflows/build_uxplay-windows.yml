@@ -29,20 +29,26 @@ jobs:
           Invoke-WebRequest https://jrsoftware.org/download.php/is.exe -OutFile is.exe
           start (Join-Path -Path $(Get-Location) -ChildPath "is.exe") /VERYSILENT
 
-      # downloads BonjourSDKSetup.exe from the URL provided, extracts it into the multiple .msi(s),
-      #    installs the runtime and then the SDK (both neeeded, in this order)
-      - name: download & install Bonjour
-        env:
-          BONJOUR_URL: ${{ inputs.bonjour_sdk_url }}
-        run: |
-          Invoke-WebRequest -Uri $env:BONJOUR_URL -OutFile bonjoursdksetup.exe
-          .'C:\Program Files\7-Zip\7z.exe' -tcab x bonjoursdksetup.exe
-          
-          $bonjour64args = "/i $(Join-Path -Path $(Get-Location) -ChildPath "Bonjour64.msi") /qn /L*v bonjour64.log"
-          Start-Process msiexec -ArgumentList $bonjour64args -NoNewWindow -Wait
-          
-          $bonjourSDK64args = "/i $(Join-Path -Path $(Get-Location) -ChildPath "BonjourSDK64.msi") /qn /L*v bonjoursdk64.log"
-          Start-Process msiexec -ArgumentList $bonjourSDK64args -NoNewWindow -Wait
+      - name: download & install Bonjour (FIXED mDNS responder)
+  	env:
+    	  BONJOUR_URL: ${{ inputs.bonjour_sdk_url }}
+ 	run: |
+    	  Invoke-WebRequest -Uri $env:BONJOUR_URL -OutFile bonjoursdksetup.exe
+
+    	  .'C:\Program Files\7-Zip\7z.exe' -tcab x bonjoursdksetup.exe
+
+    	  # Install ONLY runtime (critical fix for AirPlay UDP discovery)
+    	  $bonjour64args = "/i $(Join-Path -Path $(Get-Location) -ChildPath 'Bonjour64.msi') /qn /L*v bonjour64.log"
+    	  Start-Process msiexec -ArgumentList $bonjour64args -NoNewWindow -Wait
+
+    	  # DO NOT install SDK (it often breaks or downgrades responder behavior)
+
+    	  # Ensure service is running
+    	  sc.exe start "Bonjour Service" | Out-Null
+
+    	  # Optional but highly recommended: restart to ensure clean mDNS state
+    	  sc.exe stop "Bonjour Service"
+    	  sc.exe start "Bonjour Service"
 
       - name: download & install msys2 + build dependencies
         uses: msys2/setup-msys2@v2
